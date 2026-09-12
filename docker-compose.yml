@@ -1,0 +1,41 @@
+services:
+  oracle:
+    image: gvenzl/oracle-free:23-slim-faststart
+    container_name: histdata-oracle
+    environment:
+      ORACLE_PASSWORD: ${ORACLE_SYS_PASSWORD:-LocalSysPassword1}
+      APP_USER: ${DB_USERNAME:-HISTDATA}
+      APP_USER_PASSWORD: ${DB_PASSWORD:-LocalAppPassword1}
+    ports:
+      - "1521:1521"
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  app:
+    profiles: ["full"]
+    build: .
+    container_name: histdata-app
+    depends_on:
+      oracle:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      DB_URL: jdbc:oracle:thin:@//oracle:1521/FREEPDB1
+      DB_USERNAME: ${DB_USERNAME:-HISTDATA}
+      DB_PASSWORD: ${DB_PASSWORD:-LocalAppPassword1}
+      HISTDATA_LOCAL_ROOT: /app/local-data
+      SEED_CLIENT_PASSWORD: ${SEED_CLIENT_PASSWORD:-ChangeMeClient1!}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-ChangeMeAdmin1!}
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./local-data:/app/local-data:ro
+
+volumes:
+  oracle-data:

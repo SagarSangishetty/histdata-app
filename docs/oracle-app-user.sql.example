@@ -1,0 +1,12 @@
+-- Run once as an authorized Oracle administrator.
+-- SQL*Plus prompts for the password; do not place it in Git.
+ACCEPT app_password CHAR PROMPT 'Enter HISTDATA schema password: ' HIDE
+
+CREATE USER HISTDATA IDENTIFIED BY "&app_password"
+  DEFAULT TABLESPACE USERS
+  TEMPORARY TABLESPACE TEMP
+  QUOTA 200M ON USERS;
+
+GRANT CREATE SESSION TO HISTDATA;
+GRANT CREATE TABLE TO HISTDATA;
+GRANT CREATE SEQUENCE TO HISTDATA;

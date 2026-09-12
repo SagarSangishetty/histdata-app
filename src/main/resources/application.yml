@@ -1,0 +1,58 @@
+spring:
+  application:
+    name: histdata-app
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: oracle.jdbc.OracleDriver
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
+      minimum-idle: ${DB_POOL_MIN_IDLE:2}
+      connection-timeout: 30000
+  jpa:
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:validate}
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.OracleDialect
+        type:
+          preferred_boolean_jdbc_type: 4
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+  mvc:
+    async:
+      request-timeout: ${DOWNLOAD_TIMEOUT_MS:900000}
+
+server:
+  port: 8080
+  shutdown: graceful
+  forward-headers-strategy: framework
+  error:
+    include-message: never
+
+spring.lifecycle.timeout-per-shutdown-phase: 30s
+
+histdata:
+  local-root: ${HISTDATA_LOCAL_ROOT:./local-data}
+  s3-bucket: ${HISTDATA_S3_BUCKET:unused-local-bucket}
+  aws-region: ${AWS_REGION:ap-south-1}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} level=%-5level app=${spring.application.name} trace=%X{traceId:-none} logger=%logger{36} msg=\"%msg\"%n"

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>HistData Download Audit</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<header>
+    <a class="brand" th:href="@{/files}"><span class="brand-mark small">HD</span> HistData</a>
+    <nav>
+        <a th:href="@{/files}">Files</a>
+        <form th:action="@{/logout}" method="post"><button class="link-button" type="submit">Sign out</button></form>
+    </nav>
+</header>
+<main class="container">
+    <section class="hero">
+        <p class="eyebrow">ADMIN</p>
+        <h1>Download audit</h1>
+        <p>The latest 100 file-download attempts recorded in Oracle.</p>
+    </section>
+    <section class="panel table-scroll">
+        <table>
+            <thead><tr><th>ID</th><th>User</th><th>Segment</th><th>Trade date</th><th>File</th><th>Status</th><th>Started</th></tr></thead>
+            <tbody>
+            <tr th:each="item : ${downloads}">
+                <td th:text="${item.id}"></td>
+                <td th:text="${item.username}"></td>
+                <td th:text="${item.segment}"></td>
+                <td th:text="${item.tradeDate}"></td>
+                <td th:text="${item.fileName}"></td>
+                <td><span class="pill" th:classappend="${item.status == 'FAILED'} ? ' failed'" th:text="${item.status}"></span></td>
+                <td th:text="${item.startedAt}"></td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+</main>
+</body>
+</html>
+

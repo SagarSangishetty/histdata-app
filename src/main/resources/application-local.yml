@@ -1,0 +1,12 @@
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:oracle:thin:@//localhost:1521/FREEPDB1}
+    username: ${DB_USERNAME:HISTDATA}
+    password: ${DB_PASSWORD:LocalAppPassword1}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+seed:
+  client-password: ${SEED_CLIENT_PASSWORD:ChangeMeClient1!}
+  admin-password: ${SEED_ADMIN_PASSWORD:ChangeMeAdmin1!}

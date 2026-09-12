@@ -1,0 +1,159 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-histdata-schema
+      author: histdata
+      changes:
+        - createSequence:
+            sequenceName: APP_USER_SEQ
+            startValue: 1
+            incrementBy: 1
+        - createSequence:
+            sequenceName: SUBSCRIPTION_SEQ
+            startValue: 1
+            incrementBy: 1
+        - createSequence:
+            sequenceName: DOWNLOAD_AUDIT_SEQ
+            startValue: 1
+            incrementBy: 1
+        - createTable:
+            tableName: APP_USERS
+            columns:
+              - column:
+                  name: ID
+                  type: NUMBER(19,0)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: USERNAME
+                  type: VARCHAR2(80)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: PASSWORD_HASH
+                  type: VARCHAR2(100)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: ROLE
+                  type: VARCHAR2(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: ENABLED
+                  type: NUMBER(1,0)
+                  defaultValueNumeric: 1
+                  constraints:
+                    nullable: false
+        - createTable:
+            tableName: SUBSCRIPTIONS
+            columns:
+              - column:
+                  name: ID
+                  type: NUMBER(19,0)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: USER_ID
+                  type: NUMBER(19,0)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: SEGMENT
+                  type: VARCHAR2(10)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: VALID_FROM
+                  type: DATE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: VALID_UNTIL
+                  type: DATE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: ACTIVE
+                  type: NUMBER(1,0)
+                  defaultValueNumeric: 1
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: SUBSCRIPTIONS
+            baseColumnNames: USER_ID
+            constraintName: FK_SUBSCRIPTION_USER
+            referencedTableName: APP_USERS
+            referencedColumnNames: ID
+        - addUniqueConstraint:
+            tableName: SUBSCRIPTIONS
+            columnNames: USER_ID, SEGMENT
+            constraintName: UK_SUBSCRIPTION_USER_SEGMENT
+        - createTable:
+            tableName: DOWNLOAD_AUDIT
+            columns:
+              - column:
+                  name: ID
+                  type: NUMBER(19,0)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: USERNAME
+                  type: VARCHAR2(80)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: SEGMENT
+                  type: VARCHAR2(10)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: TRADE_DATE
+                  type: DATE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: OBJECT_KEY
+                  type: VARCHAR2(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: FILE_NAME
+                  type: VARCHAR2(160)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: SIZE_BYTES
+                  type: NUMBER(19,0)
+              - column:
+                  name: STARTED_AT
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: COMPLETED_AT
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: STATUS
+                  type: VARCHAR2(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: FAILURE_REASON
+                  type: VARCHAR2(500)
+        - createIndex:
+            tableName: DOWNLOAD_AUDIT
+            indexName: IX_AUDIT_USERNAME
+            columns:
+              - column:
+                  name: USERNAME
+        - createIndex:
+            tableName: DOWNLOAD_AUDIT
+            indexName: IX_AUDIT_STARTED_AT
+            columns:
+              - column:
+                  name: STARTED_AT
+

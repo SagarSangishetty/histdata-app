@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>HistData Files</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<header>
+    <a class="brand" th:href="@{/files}"><span class="brand-mark small">HD</span> HistData</a>
+    <nav>
+        <a th:href="@{/files}">Files</a>
+        <a sec:authorize="hasRole('ADMIN')" th:href="@{/admin/downloads}">Admin audit</a>
+        <form th:action="@{/logout}" method="post"><button class="link-button" type="submit">Sign out</button></form>
+    </nav>
+</header>
+<main class="container">
+    <section class="hero">
+        <p class="eyebrow">HISTORICAL DATA</p>
+        <h1>Download market files</h1>
+        <p>Select a subscribed segment and trading date. Files are streamed from the configured data store.</p>
+    </section>
+
+    <section class="panel">
+        <form class="filters" method="get" th:action="@{/files}">
+            <div>
+                <label for="segment">Segment</label>
+                <select id="segment" name="segment">
+                    <option th:each="item : ${ {'CM','CD','FO'} }" th:value="${item}" th:text="${item}" th:selected="${item == segment}"></option>
+                </select>
+            </div>
+            <div>
+                <label for="date">Trading date</label>
+                <input id="date" name="date" type="date" th:value="${date}" required>
+            </div>
+            <button type="submit">Find files</button>
+        </form>
+    </section>
+
+    <div class="alert error" th:if="${error}" th:text="${error}"></div>
+
+    <section class="panel">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow" th:text="${segment + ' / ' + date}"></p>
+                <h2>Available files</h2>
+            </div>
+            <span class="pill" th:text="${files.size() + ' file(s)'}"></span>
+        </div>
+        <div class="empty" th:if="${files.isEmpty() and error == null}">
+            No `.dat` files were found for this selection.
+        </div>
+        <table th:unless="${files.isEmpty()}">
+            <thead><tr><th>File</th><th>Size</th><th></th></tr></thead>
+            <tbody>
+            <tr th:each="file : ${files}">
+                <td th:text="${file.fileName}"></td>
+                <td th:text="${#numbers.formatDecimal(file.sizeBytes / 1024.0, 1, 1) + ' KB'}"></td>
+                <td class="right"><a class="download" th:href="@{/download(key=${file.key})}">Download</a></td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+</main>
+</body>
+</html>
