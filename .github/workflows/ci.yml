@@ -1,6 +1,7 @@
 name: application-ci
 
 on:
+  
   pull_request:
     branches:
       - main
@@ -10,6 +11,7 @@ on:
       - "Dockerfile"
       - ".dockerignore"
       - ".github/workflows/ci.yml"
+  
 
   push:
     branches:
@@ -20,6 +22,8 @@ on:
       - "Dockerfile"
       - ".dockerignore"
       - ".github/workflows/ci.yml"
+
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -53,7 +57,7 @@ jobs:
 
   image:
     name: Build and push image
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: test
     runs-on: ubuntu-latest
 
