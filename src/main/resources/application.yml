@@ -37,7 +37,7 @@ spring.lifecycle.timeout-per-shutdown-phase: 30s
 histdata:
   local-root: ${HISTDATA_LOCAL_ROOT:./local-data}
   s3-bucket: ${HISTDATA_S3_BUCKET:unused-local-bucket}
-  aws-region: ${AWS_REGION:ap-south-1}
+  aws-region: ${AWS_REGION:us-east-1}
 
 management:
   endpoints:
