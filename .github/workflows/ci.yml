@@ -2,46 +2,89 @@ name: application-ci
 
 on:
   pull_request:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "pom.xml"
+      - "Dockerfile"
+      - ".dockerignore"
+      - ".github/workflows/ci.yml"
+
   push:
-    branches: [main]
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "pom.xml"
+      - "Dockerfile"
+      - ".dockerignore"
+      - ".github/workflows/ci.yml"
 
 permissions:
   contents: read
-  id-token: write
+
+concurrency:
+  group: application-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
-  AWS_REGION: ap-south-1
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: histdata-app
 
 jobs:
   test:
+    name: Test application
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
           cache: maven
-      - run: mvn -B -ntp clean test
+
+      - name: Run Maven tests
+        run: mvn -B -ntp clean test
 
   image:
-    if: github.event_name == 'push'
+    name: Build and push image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: test
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          role-to-assume: ${{ vars.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          role-session-name: histdata-app-ci
           aws-region: ${{ env.AWS_REGION }}
-      - id: login-ecr
+          allowed-account-ids: "935776475838"
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push immutable image
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          tags: ${{ steps.login-ecr.outputs.registry }}/histdata-app:${{ github.sha }}
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
