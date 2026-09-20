@@ -92,3 +92,70 @@ jobs:
           tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  promote-dev:
+    name: Create dev image promotion PR
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate GitHub App token
+        id: release-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: histdata-k8s-deployments
+
+      - name: Checkout GitOps repository
+        uses: actions/checkout@v4
+        with:
+          repository: SagarSangishetty/histdata-k8s-deployments
+          ref: main
+          token: ${{ steps.release-token.outputs.token }}
+          path: gitops
+
+      - name: Update dev image tag
+        uses: mikefarah/yq@v4
+        with:
+          cmd: >-
+            yq -i
+            '.image.tag = strenv(IMAGE_TAG)'
+            gitops/environments/dev/values.yaml
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Validate dev Helm release
+        working-directory: gitops
+        run: |
+          helm lint charts/histdata \
+            --values environments/dev/values.yaml
+
+          helm template histdata charts/histdata \
+            --namespace histdata \
+            --values environments/dev/values.yaml \
+            >/dev/null
+
+      - name: Create dev promotion pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ steps.release-token.outputs.token }}
+          path: gitops
+          base: main
+          branch: automation/promote-histdata-dev
+          delete-branch: true
+          commit-message: "chore(dev): deploy histdata-app ${{ github.sha }}"
+          title: "chore(dev): deploy histdata-app ${{ github.sha }}"
+          body: |
+            Automated development image promotion.
+
+            Source repository: `${{ github.repository }}`
+            Source commit: `${{ github.sha }}`
+            Image: `${{ vars.AWS_ACCOUNT_ID || '935776475838' }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ github.sha }}`
+
+            After this PR is merged, Argo CD will synchronize the new image to the development EKS cluster.
