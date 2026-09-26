@@ -1,0 +1,209 @@
+name: application-promote-prod
+
+on:
+  workflow_dispatch:
+    inputs:
+      create_gitops_pr:
+        description: "Create prod GitOps PR (enable after prod values and chart are ready)"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: histdata-prod-image-promotion
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: histdata-app
+  DEV_ACCOUNT_ID: "935776475838"
+  PROD_ACCOUNT_ID: "708553018735"
+
+jobs:
+  select-dev-image:
+    name: Select dev image on main
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      source_sha: ${{ steps.select.outputs.source_sha }}
+      image_digest: ${{ steps.source.outputs.image_digest }}
+    steps:
+      - name: Generate GitHub App token
+        id: release-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: histdata-k8s-deployments
+
+      - name: Checkout current dev GitOps configuration
+        uses: actions/checkout@v4
+        with:
+          repository: SagarSangishetty/histdata-k8s-deployments
+          ref: main
+          token: ${{ steps.release-token.outputs.token }}
+          path: gitops
+
+      - name: Read current dev image tag
+        id: dev-image
+        uses: mikefarah/yq@v4
+        with:
+          cmd: yq -r '.image.tag' gitops/environments/dev/values.yaml
+
+      - name: Validate selected dev image
+        id: select
+        env:
+          SOURCE_SHA: ${{ steps.dev-image.outputs.result }}
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Expected a full lowercase commit SHA'; exit 1; }
+          echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Install crane
+        uses: imjasonh/setup-crane@v0.4
+
+      - name: Assume existing dev image role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          role-session-name: histdata-prod-source-verify
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ env.DEV_ACCOUNT_ID }}
+
+      - name: Log in to dev ECR
+        env:
+          REGISTRY: ${{ env.DEV_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+        run: aws ecr get-login-password --region "$AWS_REGION" | crane auth login "$REGISTRY" -u AWS --password-stdin
+
+      - name: Resolve dev image digest
+        id: source
+        env:
+          SOURCE_SHA: ${{ steps.select.outputs.source_sha }}
+        run: |
+          source_image="${DEV_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:${SOURCE_SHA}"
+          image_digest="$(crane digest "$source_image")"
+          [[ "$image_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo 'Invalid dev image digest'; exit 1; }
+          echo "image_digest=$image_digest" >> "$GITHUB_OUTPUT"
+
+  promote-image:
+    name: Promote tested image to prod ECR
+    needs: select-dev-image
+    runs-on: ubuntu-latest
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      image_digest: ${{ steps.copy.outputs.image_digest }}
+      source_sha: ${{ needs.select-dev-image.outputs.source_sha }}
+    steps:
+      - name: Install crane
+        uses: imjasonh/setup-crane@v0.4
+
+      - name: Assume prod ECR write role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_PROD_APP_PROMOTION_ROLE_ARN }}
+          role-session-name: histdata-prod-image-promotion
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ env.PROD_ACCOUNT_ID }}
+
+      # Grant this prod role pull access in the dev ECR repository policy.
+      - name: Log in to dev ECR with prod role
+        env:
+          REGISTRY: ${{ env.DEV_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+        run: aws ecr get-login-password --region "$AWS_REGION" | crane auth login "$REGISTRY" -u AWS --password-stdin
+
+      - name: Log in to prod ECR
+        env:
+          REGISTRY: ${{ env.PROD_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+        run: aws ecr get-login-password --region "$AWS_REGION" | crane auth login "$REGISTRY" -u AWS --password-stdin
+
+      - name: Copy image and verify prod digest
+        id: copy
+        env:
+          SOURCE_SHA: ${{ needs.select-dev-image.outputs.source_sha }}
+          EXPECTED_DIGEST: ${{ needs.select-dev-image.outputs.image_digest }}
+        run: |
+          source_image="${DEV_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}@${EXPECTED_DIGEST}"
+          target_image="${PROD_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:${SOURCE_SHA}"
+          source_tag="${DEV_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:${SOURCE_SHA}"
+          test "$(crane digest "$source_tag")" = "$EXPECTED_DIGEST" || { echo 'Dev image changed before promotion'; exit 1; }
+          crane copy "$source_image" "$target_image"
+          prod_digest="$(crane digest "$target_image")"
+          test "$prod_digest" = "$EXPECTED_DIGEST" || { echo "Prod image digest mismatch: $prod_digest"; exit 1; }
+          echo "image_digest=$prod_digest" >> "$GITHUB_OUTPUT"
+          echo "Promoted $target_image@$prod_digest" >> "$GITHUB_STEP_SUMMARY"
+
+  promote-gitops:
+    name: Create prod GitOps promotion PR
+    if: github.ref == 'refs/heads/main' && inputs.create_gitops_pr
+    needs: promote-image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Generate GitHub App token
+        id: release-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: histdata-k8s-deployments
+
+      - name: Checkout GitOps repository
+        uses: actions/checkout@v4
+        with:
+          repository: SagarSangishetty/histdata-k8s-deployments
+          ref: main
+          token: ${{ steps.release-token.outputs.token }}
+          path: gitops
+
+      - name: Update prod image reference
+        uses: mikefarah/yq@v4
+        env:
+          IMAGE_TAG: ${{ needs.promote-image.outputs.source_sha }}
+          IMAGE_REPOSITORY: ${{ env.PROD_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}
+        with:
+          cmd: >-
+            yq -e -i
+            '.image.repository = strenv(IMAGE_REPOSITORY) |
+            .image.tag = strenv(IMAGE_TAG)'
+            gitops/environments/prod/values.yaml
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Validate prod Helm release
+        working-directory: gitops
+        run: |
+          helm lint charts/histdata --values environments/prod/values.yaml
+          helm template histdata charts/histdata \
+            --namespace histdata \
+            --values environments/prod/values.yaml >/dev/null
+
+      - name: Create prod promotion pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ steps.release-token.outputs.token }}
+          path: gitops
+          base: main
+          branch: automation/promote-histdata-prod
+          delete-branch: true
+          commit-message: "chore(prod): promote histdata-app ${{ needs.promote-image.outputs.source_sha }}"
+          title: "chore(prod): promote histdata-app ${{ needs.promote-image.outputs.source_sha }}"
+          body: |
+            Promote the dev-tested image to production.
+
+            Source commit: `${{ needs.promote-image.outputs.source_sha }}`
+            Verified image digest: `${{ needs.promote-image.outputs.image_digest }}`
+            Prod image: `${{ env.PROD_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ needs.promote-image.outputs.source_sha }}`
+
+            Review and merge this PR to let prod Argo CD synchronize the release.

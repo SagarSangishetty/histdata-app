@@ -147,7 +147,7 @@ jobs:
           token: ${{ steps.release-token.outputs.token }}
           path: gitops
           base: main
-          branch: automation/promote-histdata-dev
+          branch: automation/promote-histdata-dev-${{ github.sha }}
           delete-branch: true
           commit-message: "chore(dev): deploy histdata-app ${{ github.sha }}"
           title: "chore(dev): deploy histdata-app ${{ github.sha }}"
