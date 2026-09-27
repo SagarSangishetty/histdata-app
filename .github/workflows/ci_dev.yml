@@ -1,4 +1,4 @@
-name: application-ci
+name: CI-DEV-PROMOTION-k8s
 
 on:
   

@@ -1,4 +1,4 @@
-name: application-promote-prod
+name: CI-PROD-PROMOTION-k8s
 
 on:
   workflow_dispatch:
