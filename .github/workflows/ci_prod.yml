@@ -2,12 +2,6 @@ name: CI-PROD-PROMOTION-k8s
 
 on:
   workflow_dispatch:
-    inputs:
-      create_gitops_pr:
-        description: "Create prod GitOps PR (enable after prod values and chart are ready)"
-        required: true
-        default: false
-        type: boolean
 
 permissions:
   contents: read
