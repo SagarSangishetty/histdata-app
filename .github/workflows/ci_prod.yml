@@ -134,7 +134,8 @@ jobs:
           source_image="${DEV_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}@${EXPECTED_DIGEST}"
           target_image="${PROD_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:${SOURCE_SHA}"
           source_tag="${DEV_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:${SOURCE_SHA}"
-          test "$(crane digest "$source_tag")" = "$EXPECTED_DIGEST" || { echo 'Dev image changed before promotion'; exit 1; }
+          actual_source_digest="$(crane digest "$source_tag")"
+          test "$actual_source_digest" = "$EXPECTED_DIGEST" || { echo "Dev image digest changed: $actual_source_digest"; exit 1; }
           crane copy "$source_image" "$target_image"
           prod_digest="$(crane digest "$target_image")"
           test "$prod_digest" = "$EXPECTED_DIGEST" || { echo "Prod image digest mismatch: $prod_digest"; exit 1; }
