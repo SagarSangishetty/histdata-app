@@ -138,7 +138,7 @@ jobs:
 
   promote-gitops:
     name: Create prod GitOps promotion PR
-    if: github.ref == 'refs/heads/main' && inputs.create_gitops_pr
+    if: github.ref == 'refs/heads/main'
     needs: promote-image
     runs-on: ubuntu-latest
     permissions:
